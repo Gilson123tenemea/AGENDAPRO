@@ -10,6 +10,7 @@ class Profesional(Base):
     organizacion_id = Column(Integer, ForeignKey("organizaciones.id"), nullable=False)
     usuario_id = Column(Integer, ForeignKey("usuarios.id"), nullable=False)
     nombre_completo = Column(String(150), nullable=False)
+    telefono = Column(String(20), nullable=True)
     token_publico = Column(String(64), unique=True, nullable=False, index=True)
     duracion_cita_min = Column(Integer, default=30)
     requiere_pago = Column(Boolean, default=False)
