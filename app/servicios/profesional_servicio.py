@@ -40,6 +40,7 @@ class ProfesionalServicio:
                 organizacion_id=organizacion_id,
                 usuario_id=usuario.id,
                 nombre_completo=datos.nombre_completo,
+                telefono=datos.telefono,
                 token_publico=secrets.token_hex(32),  # 64 caracteres aleatorios
                 duracion_cita_min=datos.duracion_cita_min,
                 requiere_pago=datos.requiere_pago,
