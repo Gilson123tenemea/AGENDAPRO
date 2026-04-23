@@ -24,6 +24,7 @@ from app.modelos import pago_modelo              # noqa
 from app.modelos import nota_cita_modelo         # noqa
 from app.modelos import calificacion_modelo      # noqa
 from app.modelos import notificacion_modelo      # noqa
+from app.modelos import administrador_modelo    # noqa  
 
 # ── Crear tablas ──────────────────────────────────────────────────────
 try:
@@ -40,6 +41,7 @@ from app.routers import horario_router
 from app.routers import cita_router
 from app.routers import paciente_router
 from app.routers import publico_router
+from app.routers import administrador_router
 
 # ── Scheduler ─────────────────────────────────────────────────────────
 scheduler = BackgroundScheduler(timezone="America/Guayaquil")
@@ -104,7 +106,7 @@ app.include_router(horario_router.router)
 app.include_router(cita_router.router)
 app.include_router(paciente_router.router)
 app.include_router(publico_router.router)
-
+app.include_router(administrador_router.router)
 
 # ── Startup ───────────────────────────────────────────────────────────
 @app.on_event("startup")

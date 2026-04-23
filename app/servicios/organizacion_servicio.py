@@ -1,18 +1,14 @@
-# ¿De dónde sale cada método?
-# registrar()       → RF-01 Registro de organización
-# obtener_por_id()  → necesario para todos los endpoints de /yo
-# actualizar()      → RF editar perfil organización
-# cambiar_estado()  → RF-13 superadmin activa/suspende cuenta
-# listar_todas()    → panel superadmin
-
-import secrets
 from sqlalchemy.orm import Session
 from datetime import datetime
 from app.modelos.organizacion_modelo import Organizacion
 from app.modelos.usuario_modelo import Usuario
-from app.esquemas.organizacion_esquema import OrganizacionCrear, OrganizacionActualizar
+from app.esquemas.organizacion_esquema import (
+    OrganizacionCrear,
+    OrganizacionActualizar,
+    OrganizacionCompletarPerfil,
+)
 from app.core.seguridad import encriptar_password
-from app.core.excepciones import ConflictoExcepcion, NoEncontradoExcepcion
+from app.core.excepciones import NoEncontradoExcepcion, ConflictoExcepcion
 from app.core.enumeraciones import RolUsuario
 
 
@@ -22,16 +18,27 @@ class OrganizacionServicio:
         self.db = db
 
     def registrar(self, datos: OrganizacionCrear):
-        # Validar slug único
-        if self.db.query(Organizacion).filter(Organizacion.slug == datos.slug).first():
-            raise ConflictoExcepcion(f"El slug '{datos.slug}' ya está en uso")
+        """
+        Paso 1 del registro.
+        Crea la organización y el primer usuario admin.
+        Todo en una sola transacción.
+        """
+        if self.db.query(Organizacion).filter(
+            Organizacion.slug == datos.slug
+        ).first():
+            raise ConflictoExcepcion(
+                f"El slug '{datos.slug}' ya está en uso. "
+                f"Elige otro nombre para tu consultorio."
+            )
 
-        # Validar email único
-        if self.db.query(Usuario).filter(Usuario.email == datos.admin_email).first():
-            raise ConflictoExcepcion(f"El email '{datos.admin_email}' ya está registrado")
+        if self.db.query(Usuario).filter(
+            Usuario.email == datos.admin_email
+        ).first():
+            raise ConflictoExcepcion(
+                f"El email '{datos.admin_email}' ya está registrado."
+            )
 
         try:
-            # Crear organización
             org = Organizacion(
                 nombre=datos.nombre,
                 slug=datos.slug,
@@ -39,9 +46,8 @@ class OrganizacionServicio:
                 telefono=datos.telefono,
             )
             self.db.add(org)
-            self.db.flush()  # obtiene el id sin hacer commit
+            self.db.flush()
 
-            # Crear usuario admin
             usuario = Usuario(
                 organizacion_id=org.id,
                 email=datos.admin_email,
@@ -58,6 +64,22 @@ class OrganizacionServicio:
             self.db.rollback()
             raise
 
+    def completar_perfil(
+        self, org_id: int, datos: OrganizacionCompletarPerfil
+    ) -> Organizacion:
+        """
+        Paso 2 del registro — completar perfil de la organización.
+        El admin lo hace desde su panel después de registrarse.
+        """
+        org = self.obtener_por_id(org_id)
+        campos = datos.model_dump(exclude_none=True)
+        for campo, valor in campos.items():
+            setattr(org, campo, valor)
+        org.perfil_completo = True
+        self.db.commit()
+        self.db.refresh(org)
+        return org
+
     def obtener_por_id(self, org_id: int) -> Organizacion:
         org = self.db.query(Organizacion).filter(
             Organizacion.id == org_id,
@@ -67,7 +89,18 @@ class OrganizacionServicio:
             raise NoEncontradoExcepcion("Organización no encontrada")
         return org
 
-    def actualizar(self, org_id: int, datos: OrganizacionActualizar) -> Organizacion:
+    def obtener_por_slug(self, slug: str) -> Organizacion:
+        org = self.db.query(Organizacion).filter(
+            Organizacion.slug == slug,
+            Organizacion.esta_activo == True,
+        ).first()
+        if not org:
+            raise NoEncontradoExcepcion("Organización no encontrada")
+        return org
+
+    def actualizar(
+        self, org_id: int, datos: OrganizacionActualizar
+    ) -> Organizacion:
         org = self.obtener_por_id(org_id)
         campos = datos.model_dump(exclude_none=True)
         for campo, valor in campos.items():
