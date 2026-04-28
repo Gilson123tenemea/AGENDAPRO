@@ -4,7 +4,7 @@ from app.base_datos.conexion import get_db
 from app.core.dependencias import solo_admin, solo_profesional
 from app.servicios.profesional_servicio import ProfesionalServicio
 from app.esquemas.profesional_esquema import (
-    ProfesionalCrear, ProfesionalActualizar, ProfesionalSalida
+    ProfesionalCrear, ProfesionalActualizar, ProfesionalSalida, ProfesionalCompletarPerfil, ProfesionalCompletarPerfil
 )
 
 router = APIRouter(prefix="/api/v1/profesionales", tags=["Profesionales"])
@@ -36,6 +36,30 @@ def listar(
     return ProfesionalServicio(db).listar_por_organizacion(usuario_actual.organizacion_id)
 
 
+# ✅ /yo DEBE ir antes de /{profesional_id}
+@router.get(
+    "/yo",
+    response_model=ProfesionalSalida,
+    summary="Obtiene mi perfil de profesional"
+)
+def obtener_mi_perfil(
+    usuario_actual=Depends(solo_profesional),
+    db: Session = Depends(get_db),
+):
+    return ProfesionalServicio(db).obtener_por_usuario(usuario_actual.id)
+
+@router.put(
+    "/yo/perfil",
+    response_model=ProfesionalSalida,
+    summary="Completa el perfil del profesional autenticado"
+)
+def completar_mi_perfil(
+    datos: ProfesionalCompletarPerfil,
+    usuario_actual=Depends(solo_profesional),
+    db: Session = Depends(get_db),
+):
+    return ProfesionalServicio(db).completar_perfil(usuario_actual.id, datos)
+
 @router.get(
     "/{profesional_id}",
     response_model=ProfesionalSalida,
@@ -43,7 +67,7 @@ def listar(
 )
 def obtener(
     profesional_id: int,
-    usuario_actual=Depends(solo_profesional),
+    usuario_actual=Depends(solo_profesional),   
     db: Session = Depends(get_db),
 ):
     return ProfesionalServicio(db).obtener_por_id(
@@ -79,3 +103,4 @@ def eliminar(
     return ProfesionalServicio(db).eliminar(
         profesional_id, usuario_actual.organizacion_id
     )
+

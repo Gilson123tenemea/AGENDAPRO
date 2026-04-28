@@ -1,17 +1,9 @@
-# ¿De dónde sale cada método?
-# crear()                   → RF-03 Gestión de profesionales
-# obtener_por_id()          → base para todos los endpoints
-# obtener_por_token()       → RF-06 el paciente llega por link público
-# listar_por_organizacion() → panel del admin
-# actualizar()              → RF-03 editar perfil
-# eliminar()                → RF-03 borrado lógico
-
 import secrets
 from sqlalchemy.orm import Session
 from datetime import datetime
 from app.modelos.profesional_modelo import Profesional
 from app.modelos.usuario_modelo import Usuario
-from app.esquemas.profesional_esquema import ProfesionalCrear, ProfesionalActualizar
+from app.esquemas.profesional_esquema import ProfesionalCrear, ProfesionalActualizar, ProfesionalCompletarPerfil
 from app.core.seguridad import encriptar_password
 from app.core.excepciones import NoEncontradoExcepcion, ConflictoExcepcion
 from app.core.enumeraciones import RolUsuario
@@ -41,7 +33,7 @@ class ProfesionalServicio:
                 usuario_id=usuario.id,
                 nombre_completo=datos.nombre_completo,
                 telefono=datos.telefono,
-                token_publico=secrets.token_hex(32),  # 64 caracteres aleatorios
+                token_publico=secrets.token_hex(32),
                 duracion_cita_min=datos.duracion_cita_min,
                 requiere_pago=datos.requiere_pago,
                 precio=datos.precio,
@@ -54,6 +46,16 @@ class ProfesionalServicio:
         except Exception:
             self.db.rollback()
             raise
+
+    def obtener_por_usuario(self, usuario_id: int) -> Profesional:
+        pro = self.db.query(Profesional).filter(
+            Profesional.usuario_id == usuario_id,
+            Profesional.esta_activo == True,
+            Profesional.eliminado_en == None,
+        ).first()
+        if not pro:
+            raise NoEncontradoExcepcion("Profesional no encontrado")
+        return pro
 
     def obtener_por_id(self, profesional_id: int, organizacion_id: int) -> Profesional:
         pro = self.db.query(Profesional).filter(
@@ -91,6 +93,17 @@ class ProfesionalServicio:
         self.db.commit()
         self.db.refresh(pro)
         return pro
+    
+
+    def completar_perfil(self, usuario_id: int, datos: ProfesionalCompletarPerfil) -> Profesional:
+        pro = self.obtener_por_usuario(usuario_id)
+        campos = datos.model_dump(exclude_none=True)
+        for campo, valor in campos.items():
+            setattr(pro, campo, valor)
+            pro.perfil_completo = True
+        self.db.commit()
+        self.db.refresh(pro)
+        return pro
 
     def eliminar(self, profesional_id: int, organizacion_id: int):
         pro = self.obtener_por_id(profesional_id, organizacion_id)
@@ -98,3 +111,5 @@ class ProfesionalServicio:
         pro.eliminado_en = datetime.utcnow()
         self.db.commit()
         return {"mensaje": "Profesional eliminado correctamente"}
+    
+    

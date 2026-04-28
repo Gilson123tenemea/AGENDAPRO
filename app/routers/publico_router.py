@@ -2,16 +2,44 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from app.base_datos.conexion import get_db
-from app.servicios.profesional_servicio import ProfesionalServicio
-from app.servicios.cita_servicio import CitaServicio
-from app.esquemas.profesional_esquema import ProfesionalPublicoSalida
+from app.modelos.cita_modelo import Cita
+from app.modelos.paciente_modelo import Paciente
+from app.modelos.profesional_modelo import Profesional
 from app.esquemas.cita_esquema import (
-    ReservarCitaEntrada, CancelarCitaEntrada,
-    CitaSalida, SlotDisponibleSalida,
+    CancelarCitaEntrada, CitaSalida,
+    SlotDisponibleSalida, ReservarCitaEntrada,
 )
+from app.esquemas.profesional_esquema import ProfesionalPublicoSalida
+from app.servicios.cita_servicio import CitaServicio
+from app.servicios.profesional_servicio import ProfesionalServicio
+from app.core.excepciones import NoEncontradoExcepcion
+from pydantic import BaseModel
+from typing import Optional
 
-router = APIRouter(prefix="/api/v1/publico", tags=["Público - Paciente"])
+router = APIRouter(prefix="/api/v1/publico", tags=["Público"])
 
+
+# ── Esquema público de cita ──────────────────────────────────────────
+class CitaPublicaSalida(BaseModel):
+    token_reserva: str
+    estado: str
+    inicio: datetime
+    fin: datetime
+    motivo: str
+    motivo_cancelacion: Optional[str] = None
+    nombre_paciente: str
+    telefono_paciente: str
+    nombre_profesional: str
+    titulo_profesional: Optional[str] = None
+    telefono_profesional: Optional[str] = None
+    organizacion_nombre: str
+    direccion_consultorio: Optional[str] = None
+    model_config = {"from_attributes": True}
+
+
+# ══════════════════════════════════════════════════
+# PROFESIONALES (público, sin auth)
+# ══════════════════════════════════════════════════
 
 @router.get(
     "/profesionales/{token}",
@@ -50,68 +78,69 @@ def reservar_cita(
     return CitaServicio(db).reservar(profesional, datos)
 
 
+# ══════════════════════════════════════════════════
+# CITAS (público, sin auth)
+# ══════════════════════════════════════════════════
+
 @router.get(
-    "/citas/{token_reserva}",
-    response_model=CitaSalida,
-    summary="El paciente consulta su cita",
+    "/citas/{token}",
+    response_model=CitaPublicaSalida,
+    summary="Consulta pública de cita por token",
 )
-def consultar_cita(token_reserva: str, db: Session = Depends(get_db)):
-    return CitaServicio(db).obtener_por_token(token_reserva)
+def estado_cita(token: str, db: Session = Depends(get_db)):
+    cita = db.query(Cita).filter(Cita.token_reserva == token).first()
+    if not cita:
+        raise NoEncontradoExcepcion("Cita no encontrada")
+
+    paciente    = db.query(Paciente).filter(Paciente.id == cita.paciente_id).first()
+    profesional = db.query(Profesional).filter(Profesional.id == cita.profesional_id).first()
+
+    return CitaPublicaSalida(
+        token_reserva=cita.token_reserva,
+        estado=cita.estado,
+        inicio=cita.inicio,
+        fin=cita.fin,
+        motivo=cita.motivo,
+        motivo_cancelacion=cita.motivo_cancelacion,
+        nombre_paciente=paciente.nombre_completo if paciente else "Paciente",
+        telefono_paciente=paciente.telefono if paciente else "",
+        nombre_profesional=profesional.nombre_completo if profesional else "Profesional",
+        titulo_profesional=profesional.titulo_profesional if profesional else None,
+        telefono_profesional=profesional.telefono if profesional else None,
+        organizacion_nombre=profesional.organizacion.nombre if profesional else "",
+        direccion_consultorio=profesional.direccion_consultorio if profesional else None,
+    )
 
 
-@router.delete(
-    "/citas/{token_reserva}",
-    summary="El paciente cancela su cita",
+@router.post(
+    "/citas/{token}/cancelar",
+    response_model=CitaPublicaSalida,
+    summary="Cancela una cita pública por token",
 )
-def cancelar_cita_paciente(
-    token_reserva: str,
+def cancelar_cita_publica(
+    token: str,
     datos: CancelarCitaEntrada,
     db: Session = Depends(get_db),
 ):
-    servicio = CitaServicio(db)
-    cita = servicio.obtener_por_token(token_reserva)
-    return servicio.cancelar(cita, datos)
+    svc  = CitaServicio(db)
+    cita = svc.obtener_por_token(token)
+    cita = svc.cancelar(cita, datos)
 
+    paciente    = db.query(Paciente).filter(Paciente.id == cita.paciente_id).first()
+    profesional = db.query(Profesional).filter(Profesional.id == cita.profesional_id).first()
 
-# ======================================================================
-# 🧪 ENDPOINTS DE PRUEBA — ELIMINAR ANTES DE PRODUCCIÓN
-# ======================================================================
-
-@router.post(
-    "/test/whatsapp",
-    tags=["Test"],
-    summary="Prueba envío directo de WhatsApp",
-)
-def probar_whatsapp(
-    telefono: str = Query(..., description="Formato: +593991234567"),
-    db: Session = Depends(get_db),
-):
-    from app.servicios.notificacion_servicio import NotificacionServicio
-    notif = NotificacionServicio(db)
-    exito = notif._enviar_whatsapp(
-        telefono,
-        "✅ Prueba de AgendaPro — WhatsApp funciona correctamente.",
+    return CitaPublicaSalida(
+        token_reserva=cita.token_reserva,
+        estado=cita.estado,
+        inicio=cita.inicio,
+        fin=cita.fin,
+        motivo=cita.motivo,
+        motivo_cancelacion=cita.motivo_cancelacion,
+        nombre_paciente=paciente.nombre_completo if paciente else "Paciente",
+        telefono_paciente=paciente.telefono if paciente else "",
+        nombre_profesional=profesional.nombre_completo if profesional else "Profesional",
+        titulo_profesional=profesional.titulo_profesional if profesional else None,
+        telefono_profesional=profesional.telefono if profesional else None,
+        organizacion_nombre=profesional.organizacion.nombre if profesional else "",
+        direccion_consultorio=profesional.direccion_consultorio if profesional else None,
     )
-    return {"exito": exito, "telefono": telefono}
-
-
-@router.post(
-    "/test/scheduler",
-    tags=["Test"],
-    summary="Fuerza ejecución del scheduler de recordatorios",
-)
-def forzar_scheduler():
-    from main import procesar_recordatorios
-    procesar_recordatorios()
-    return {"mensaje": "Scheduler ejecutado — revisa tu WhatsApp"}
-
-
-@router.post(
-    "/test/resumen-diario",
-    tags=["Test"],
-    summary="Fuerza el resumen diario del profesional",
-)
-def forzar_resumen_diario():
-    from main import enviar_resumenes_diarios
-    enviar_resumenes_diarios()
-    return {"mensaje": "Resumen diario ejecutado — revisa tu WhatsApp"}
