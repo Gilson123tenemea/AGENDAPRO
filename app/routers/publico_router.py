@@ -1,5 +1,5 @@
 from datetime import datetime
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.orm import Session
 from app.base_datos.conexion import get_db
 from app.modelos.cita_modelo import Cita
@@ -144,3 +144,14 @@ def cancelar_cita_publica(
         organizacion_nombre=profesional.organizacion.nombre if profesional else "",
         direccion_consultorio=profesional.direccion_consultorio if profesional else None,
     )
+
+@router.get("/citas/{token_reserva}/profesional-token", 
+    summary="Obtiene el token público del profesional de una cita")
+def token_profesional_por_cita(
+    token_reserva: str,
+    db: Session = Depends(get_db),
+):
+    cita = db.query(Cita).filter(Cita.token_reserva == token_reserva).first()
+    if not cita:
+        raise NoEncontradoExcepcion("Cita no encontrada")
+    return {"token_publico": cita.profesional.token_publico}
