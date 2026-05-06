@@ -16,3 +16,22 @@ class PacienteSalida(BaseModel):
 
 class PacienteActualizar(BaseModel):
     notas: Optional[str] = None
+
+class CitaResumenSalida(BaseModel):
+    id: int
+    inicio: datetime
+    fin: datetime
+    motivo: str
+    estado: str
+    asistio: Optional[bool] = None
+    motivo_cancelacion: Optional[str] = None
+    model_config = {"from_attributes": True}
+
+
+class HistorialPacienteSalida(BaseModel):
+    citas: list[CitaResumenSalida]
+    total: int
+    completadas: int
+    no_asistio: int
+    canceladas: int
+    tasa_asistencia: float
